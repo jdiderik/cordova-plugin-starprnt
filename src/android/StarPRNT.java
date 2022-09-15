@@ -89,7 +89,11 @@ public class StarPRNT extends CordovaPlugin {
             String portSettings = getPortSettingsOption(portName, args.getString(1));
             Emulation emulation = getEmulation(args.getString(1));
             String printObj = args.getString(2);
-            this.printRasterReceipt(portName, portSettings, emulation, printObj, callbackContext);
+            try {
+                this.printRasterReceipt(portName, portSettings, emulation, printObj, callbackContext);
+            } catch (IOException e) {
+               // e.printStackTrace();
+            }
             return true;
         }else if (action.equals("printBase64Image")) {
             String portName = args.getString(0);
@@ -109,10 +113,10 @@ public class StarPRNT extends CordovaPlugin {
             this.printRawText(portName, portSettings, emulation, printObj, callbackContext);
             return true;
         }else if (action.equals("printRasterData")){
-        String portName = args.getString(0);
-        String portSettings = getPortSettingsOption(portName, args.getString(1));
-        Emulation emulation = getEmulation(args.getString(1));
-        String printObj = args.getString(2);
+            String portName = args.getString(0);
+            String portSettings = getPortSettingsOption(portName, args.getString(1));
+            Emulation emulation = getEmulation(args.getString(1));
+            String printObj = args.getString(2);
 
             try {
                 this.printRasterData(portName, portSettings, emulation, printObj, callbackContext);
@@ -470,19 +474,26 @@ public class StarPRNT extends CordovaPlugin {
                     }
                 });
     }
-    private void printRasterReceipt(String portName, String portSettings, Emulation emulation, String printObj, CallbackContext callbackContext) throws JSONException {
+    private void printRasterReceipt(String portName, String portSettings, Emulation emulation, String printObj, CallbackContext callbackContext) throws IOException, JSONException {
 
         final Context context = this.cordova.getActivity();
+        final ContentResolver contentResolver = context.getContentResolver();
         final String _portName = portName;
         final String _portSettings = portSettings;
         final Emulation _emulation = emulation;
         final JSONObject print = new JSONObject(printObj);
         final String text = print.getString("text");
+        final String headerImage = (print.has("headerImage")) ? print.getString("headerImage") : null;
+        final int headerImageWidth = (print.has("headerImageWidth")) ? print.getInt("headerImageWidth") : 576;
+        final String headerText = (print.has("headerText")) ? print.getString("headerText") : null;
+        final int headerFontSize = (print.has("headerFontSize")) ? print.getInt("headerFontSize") : 25;
         final int fontSize = (print.has("fontSize")) ? print.getInt("fontSize") : 25;
         final int paperWidth = (print.has("paperWidth")) ? print.getInt("paperWidth"): 576;
         final Boolean cutReceipt = (print.has("cutReceipt") ? print.getBoolean("cutReceipt"): true);
         final Boolean openCashDrawer = (print.has("openCashDrawer")) ? print.getBoolean("openCashDrawer") : true;
         final CallbackContext _callbackContext = callbackContext;
+        final String footerBase64Image = (print.has("footerBase64Image")) ? print.getString("footerBase64Image") : null;
+        final int footerBase64ImageWidth = (print.has("footerBase64ImageWidth")) ? print.getInt("footerBase64ImageWidth") : 576;
 
         cordova.getThreadPool()
                 .execute(new Runnable() {
@@ -493,10 +504,38 @@ public class StarPRNT extends CordovaPlugin {
                         ICommandBuilder builder = StarIoExt.createCommandBuilder(_emulation);
 
                         builder.beginDocument();
+                            
+                        Bitmap padding = createBitmapFromText("\n", 25, paperWidth, typeface, "Center");
+                        BitmapFactory.Options options = new BitmapFactory.Options();
+                        options.inSampleSize = 5;
 
-                        Bitmap image = createBitmapFromText(text, fontSize, paperWidth, typeface);
+                        if(headerImage != null && !headerImage.isEmpty()){
+                            Uri imageUri = null;
+                            Bitmap header_logo_bitmap = null;
+                            try {
+                                imageUri =  Uri.parse(headerImage);
+                                header_logo_bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri);
+                            } catch (IOException e) {
+                                _callbackContext.error(e.getMessage());
+                            }
+                            builder.appendBitmapWithAbsolutePosition(header_logo_bitmap, false, headerImageWidth, true, ((paperWidth - headerImageWidth) / 2));
+                            builder.appendBitmap(padding, false);
+                        }
 
+                        if(headerText != null && !headerText.isEmpty()){
+                            Bitmap header_text = createBitmapFromText(headerText, headerFontSize, paperWidth, typeface, "Center");
+                            builder.appendBitmap(header_text, false);
+                        }
+
+                        Bitmap image = createBitmapFromText(text, fontSize, paperWidth, typeface, "Normal");
                         builder.appendBitmap(image, false);
+                        
+                        if(footerBase64Image != null && !footerBase64Image.isEmpty()){
+                            byte[] footerbase64converted=Base64.decode(footerBase64Image,Base64.DEFAULT);                        
+                            Bitmap footer_bitmap = BitmapFactory.decodeByteArray(footerbase64converted,0,footerbase64converted.length,options);
+                            builder.appendBitmapWithAbsolutePosition(footer_bitmap, false, footerBase64ImageWidth, true, ((paperWidth - headerImageWidth) / 2));
+                            builder.appendBitmap(padding, false);
+                        }
 
                         if(cutReceipt){
                             builder.appendCutPaper(CutPaperAction.PartialCutWithFeed);
@@ -967,6 +1006,12 @@ public class StarPRNT extends CordovaPlugin {
         else return ICommandBuilder.AlignmentPosition.Left;
     }
 
+    private Layout.Alignment getLayoutAlignment(String alignment){
+        if(alignment.equals("Opposite")) return Layout.Alignment.ALIGN_OPPOSITE;
+        else if(alignment.equals("Center")) return Layout.Alignment.ALIGN_CENTER;
+        else return Layout.Alignment.ALIGN_NORMAL;
+    }
+
     private ICommandBuilder.BarcodeSymbology getBarcodeSymbology(String barcodeSymbology){
         if(barcodeSymbology.equals("Code128")) return ICommandBuilder.BarcodeSymbology.Code128;
         else if (barcodeSymbology.equals("Code39")) return ICommandBuilder.BarcodeSymbology.Code39;
@@ -1255,7 +1300,7 @@ public class StarPRNT extends CordovaPlugin {
 
     };
 
-    private Bitmap createBitmapFromText(String printText, int textSize, int printWidth, Typeface typeface) {
+    private Bitmap createBitmapFromText(String printText, int textSize, int printWidth, Typeface typeface, String alignment) {
         Paint paint = new Paint();
         Bitmap bitmap;
         Canvas canvas;
@@ -1266,7 +1311,7 @@ public class StarPRNT extends CordovaPlugin {
         paint.getTextBounds(printText, 0, printText.length(), new Rect());
 
         TextPaint textPaint = new TextPaint(paint);
-        android.text.StaticLayout staticLayout = new StaticLayout(printText, textPaint, printWidth, Layout.Alignment.ALIGN_NORMAL, 1, 0, false);
+        android.text.StaticLayout staticLayout = new StaticLayout(printText, textPaint, printWidth, getLayoutAlignment(alignment), 1, 0, false);
 
         // Create bitmap
         bitmap = Bitmap.createBitmap(staticLayout.getWidth(), staticLayout.getHeight(), Bitmap.Config.ARGB_8888);
