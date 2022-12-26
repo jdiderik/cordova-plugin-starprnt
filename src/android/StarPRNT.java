@@ -484,6 +484,7 @@ public class StarPRNT extends CordovaPlugin {
         final JSONObject print = new JSONObject(printObj);
         final String text = print.getString("text");
         final String headerImage = (print.has("headerImage")) ? print.getString("headerImage") : null;
+        final String rightText = (print.has("rightText")) ? print.getString("rightText") : null;
         final int headerImageWidth = (print.has("headerImageWidth")) ? print.getInt("headerImageWidth") : 576;
         final String headerText = (print.has("headerText")) ? print.getString("headerText") : null;
         final int headerFontSize = (print.has("headerFontSize")) ? print.getInt("headerFontSize") : 25;
@@ -494,12 +495,18 @@ public class StarPRNT extends CordovaPlugin {
         final CallbackContext _callbackContext = callbackContext;
         final String footerBase64Image = (print.has("footerBase64Image")) ? print.getString("footerBase64Image") : null;
         final int footerBase64ImageWidth = (print.has("footerBase64ImageWidth")) ? print.getInt("footerBase64ImageWidth") : 576;
+        final String qrCode = (print.has("appendQrCode") ? print.getString("appendQrCode"): null);
+        final String qrCodeModel = (print.has("QrCodeModel") ? print.getString("QrCodeModel"): "No2");
+        final String qrCodeLevel = (print.has("QrCodeLevel") ? print.getString("QrCodeLevel"): "H");
+        final int qrCodeCell = (print.has("cell") ? print.getInt("cell"): 4);
 
         cordova.getThreadPool()
                 .execute(new Runnable() {
                     public void run() {
 
-                        Typeface typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL);
+                        Bitmap image;
+
+                        Typeface typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL);
 
                         ICommandBuilder builder = StarIoExt.createCommandBuilder(_emulation);
 
@@ -527,7 +534,12 @@ public class StarPRNT extends CordovaPlugin {
                             builder.appendBitmap(header_text, false);
                         }
 
-                        Bitmap image = createBitmapFromText(text, fontSize, paperWidth, typeface, "Normal");
+                        if(rightText != null && !rightText.isEmpty()){
+                            image = createBitmapFromSplitText(text, rightText, fontSize, paperWidth, typeface);
+                        } else {
+                            Typeface typefacee = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL);
+                            image = createBitmapFromText(text, fontSize, paperWidth, typefacee, "Normal");
+                        }
                         builder.appendBitmap(image, false);
                         
                         if(footerBase64Image != null && !footerBase64Image.isEmpty()){
@@ -535,6 +547,13 @@ public class StarPRNT extends CordovaPlugin {
                             Bitmap footer_bitmap = BitmapFactory.decodeByteArray(footerbase64converted,0,footerbase64converted.length,options);
                             builder.appendBitmapWithAbsolutePosition(footer_bitmap, false, footerBase64ImageWidth, true, ((paperWidth - headerImageWidth) / 2));
                             builder.appendBitmap(padding, false);
+                        }
+
+                        if (qrCode != null && !qrCode.isEmpty()){
+                            Charset encoding = Charset.forName("US-ASCII");
+                            ICommandBuilder.QrCodeModel _qrCodeModel = getQrCodeModel(qrCodeModel);
+                            ICommandBuilder.QrCodeLevel _qrCodeLevel = getQrCodeLevel(qrCodeLevel);
+                            builder.appendQrCode(qrCode.getBytes(encoding), _qrCodeModel, _qrCodeLevel, qrCodeCell);
                         }
 
                         if(cutReceipt){
@@ -1321,6 +1340,50 @@ public class StarPRNT extends CordovaPlugin {
         canvas.drawColor(Color.WHITE);
         canvas.translate(0, 0);
         staticLayout.draw(canvas);
+
+        return bitmap;
+    }
+
+    private Bitmap createBitmapFromSplitText(String leftText, String rightText, int textSize, int printWidth, Typeface typeface) {
+        Paint paint_l = new Paint();
+        Paint paint_r = new Paint();
+        Bitmap bitmap_l;
+        Bitmap bitmap_r;
+        Bitmap bitmap;
+        Canvas canvas;
+
+        paint_l.setTextSize(textSize);
+        paint_l.setTypeface(typeface);
+
+        paint_l.getTextBounds(leftText, 0, leftText.length(), new Rect());
+
+        TextPaint textPaint_l = new TextPaint(paint_l);
+        android.text.StaticLayout staticLayout_l = new StaticLayout(leftText, textPaint_l, printWidth, getLayoutAlignment("Left"), 1, 0, false);
+
+        paint_r.setTextSize(textSize);
+        paint_r.setTypeface(typeface);
+
+        paint_r.getTextBounds(rightText, 0, rightText.length(), new Rect());
+
+        TextPaint textPaint_r = new TextPaint(paint_r);
+        textPaint_r.setTextAlign(Paint.Align.RIGHT);
+        android.text.StaticLayout staticLayout_r = new StaticLayout(rightText, textPaint_r, printWidth, getLayoutAlignment("Right"), 1, 0, false);
+
+        int height = staticLayout_l.getHeight() > staticLayout_r.getHeight() ? staticLayout_l.getHeight() : staticLayout_r.getHeight();
+
+        // Create bitmap
+        bitmap_l = Bitmap.createBitmap(printWidth, height, Bitmap.Config.ARGB_8888);
+
+        // Create bitmap
+        bitmap_r = Bitmap.createBitmap(printWidth, height, Bitmap.Config.ARGB_8888);
+
+        bitmap = Bitmap.createBitmap(printWidth, height, bitmap_l.getConfig());
+
+        canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
+        canvas.translate(0, 0);
+        staticLayout_l.draw(canvas);
+        staticLayout_r.draw(canvas);
 
         return bitmap;
     }
