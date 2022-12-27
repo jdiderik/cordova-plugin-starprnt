@@ -499,6 +499,7 @@ public class StarPRNT extends CordovaPlugin {
         final String qrCodeModel = (print.has("QrCodeModel") ? print.getString("QrCodeModel"): "No2");
         final String qrCodeLevel = (print.has("QrCodeLevel") ? print.getString("QrCodeLevel"): "H");
         final int qrCodeCell = (print.has("cell") ? print.getInt("cell"): 4);
+        final int qrCodeLeftPadding = (print.has("qrCodeLeftPadding") ? print.getInt("qrCodeLeftPadding"): -1);
 
         cordova.getThreadPool()
                 .execute(new Runnable() {
@@ -551,9 +552,15 @@ public class StarPRNT extends CordovaPlugin {
 
                         if (qrCode != null && !qrCode.isEmpty()){
                             Charset encoding = Charset.forName("US-ASCII");
-                            ICommandBuilder.QrCodeModel _qrCodeModel = getQrCodeModel(qrCodeModel);
-                            ICommandBuilder.QrCodeLevel _qrCodeLevel = getQrCodeLevel(qrCodeLevel);
-                            builder.appendQrCode(qrCode.getBytes(encoding), _qrCodeModel, _qrCodeLevel, qrCodeCell);
+                            ICommandBuilder.QrCodeModel _qrCodeModel = getQrCodeModel("No2");
+                            ICommandBuilder.QrCodeLevel _qrCodeLevel = getQrCodeLevel("H");
+                            int _qrCodeLeftPadding;
+                            if(qrCodeLeftPadding == -1){
+                                _qrCodeLeftPadding = 250 - (int) (qrCode.length() * 0.8);
+                            } else {
+                                _qrCodeLeftPadding = qrCodeLeftPadding;
+                            }
+                            builder.appendQrCodeWithAbsolutePosition(qrCode.getBytes(encoding), _qrCodeModel, _qrCodeLevel, qrCodeCell, _qrCodeLeftPadding);
                         }
 
                         if(cutReceipt){
