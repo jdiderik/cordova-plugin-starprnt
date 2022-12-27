@@ -1367,7 +1367,7 @@ public class StarPRNT extends CordovaPlugin {
 
         TextPaint textPaint_r = new TextPaint(paint_r);
         textPaint_r.setTextAlign(Paint.Align.RIGHT);
-        android.text.StaticLayout staticLayout_r = new StaticLayout(rightText, textPaint_r, printWidth, getLayoutAlignment("Right"), 1, 0, false);
+        android.text.StaticLayout staticLayout_r = new StaticLayout(rightText, textPaint_r, printWidth, getLayoutAlignment("Opposite"), 1, 0, false);
 
         int height = staticLayout_l.getHeight() > staticLayout_r.getHeight() ? staticLayout_l.getHeight() : staticLayout_r.getHeight();
 
