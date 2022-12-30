@@ -483,6 +483,7 @@ public class StarPRNT extends CordovaPlugin {
         final Emulation _emulation = emulation;
         final JSONObject print = new JSONObject(printObj);
         final String text = print.getString("text");
+        final String poweredBy = (print.has("poweredBy")) ? print.getString("poweredBy") : null;
         final String headerImage = (print.has("headerImage")) ? print.getString("headerImage") : null;
         final String rightText = (print.has("rightText")) ? print.getString("rightText") : null;
         final int headerImageWidth = (print.has("headerImageWidth")) ? print.getInt("headerImageWidth") : 576;
@@ -494,12 +495,8 @@ public class StarPRNT extends CordovaPlugin {
         final Boolean openCashDrawer = (print.has("openCashDrawer")) ? print.getBoolean("openCashDrawer") : true;
         final CallbackContext _callbackContext = callbackContext;
         final String footerBase64Image = (print.has("footerBase64Image")) ? print.getString("footerBase64Image") : null;
-        final int footerBase64ImageWidth = (print.has("footerBase64ImageWidth")) ? print.getInt("footerBase64ImageWidth") : 576;
         final String qrCode = (print.has("appendQrCode") ? print.getString("appendQrCode"): null);
-        final String qrCodeModel = (print.has("QrCodeModel") ? print.getString("QrCodeModel"): "No2");
-        final String qrCodeLevel = (print.has("QrCodeLevel") ? print.getString("QrCodeLevel"): "H");
-        final int qrCodeCell = (print.has("cell") ? print.getInt("cell"): 4);
-        final int qrCodeLeftPadding = (print.has("qrCodeLeftPadding") ? print.getInt("qrCodeLeftPadding"): -1);
+        final int footerBase64ImageWidth = (print.has("footerBase64ImageWidth")) ? print.getInt("footerBase64ImageWidth") : 576;
 
         cordova.getThreadPool()
                 .execute(new Runnable() {
@@ -508,6 +505,8 @@ public class StarPRNT extends CordovaPlugin {
                         Bitmap image;
 
                         Typeface typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL);
+                        Typeface m_typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL);
+                        Charset encoding = Charset.forName("US-ASCII");
 
                         ICommandBuilder builder = StarIoExt.createCommandBuilder(_emulation);
 
@@ -538,8 +537,7 @@ public class StarPRNT extends CordovaPlugin {
                         if(rightText != null && !rightText.isEmpty()){
                             image = createBitmapFromSplitText(text, rightText, fontSize, paperWidth, typeface);
                         } else {
-                            Typeface typefacee = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL);
-                            image = createBitmapFromText(text, fontSize, paperWidth, typefacee, "Normal");
+                            image = createBitmapFromText(text, fontSize, paperWidth, m_typeface, "Normal");
                         }
                         builder.appendBitmap(image, false);
                         
@@ -550,18 +548,32 @@ public class StarPRNT extends CordovaPlugin {
                             builder.appendBitmap(padding, false);
                         }
 
-                        if (qrCode != null && !qrCode.isEmpty()){
-                            Charset encoding = Charset.forName("US-ASCII");
-                            ICommandBuilder.QrCodeModel _qrCodeModel = getQrCodeModel("No2");
-                            ICommandBuilder.QrCodeLevel _qrCodeLevel = getQrCodeLevel("H");
-                            int _qrCodeLeftPadding;
-                            if(qrCodeLeftPadding == -1){
-                                _qrCodeLeftPadding = 250 - (int) (qrCode.length() * 0.8);
-                            } else {
-                                _qrCodeLeftPadding = qrCodeLeftPadding;
+
+                        try {
+                            
+                            if (print.has("appendQrCode")){
+                                ICommandBuilder.QrCodeModel qrCodeModel =  (print.has("QrCodeModel") ? getQrCodeModel(print.getString("QrCodeModel")): getQrCodeModel("No2"));
+                                ICommandBuilder.QrCodeLevel qrCodeLevel = (print.has("QrCodeLevel") ? getQrCodeLevel(print.getString("QrCodeLevel")): getQrCodeLevel("H"));
+                                int cell = (print.has("cell") ? print.getInt("cell"): 4);
+                                int position = (print.has("absolutePosition") ? print.getInt("absolutePosition") : 0);
+                                builder.appendQrCodeWithAbsolutePosition(print.getString("appendQrCode").getBytes(encoding), qrCodeModel, qrCodeLevel, cell, position);
+                            } else if (print.has("appendBarcode")){
+                                ICommandBuilder.BarcodeSymbology barcodeSymbology = (print.has("BarcodeSymbology") ? getBarcodeSymbology(print.getString("BarcodeSymbology")): getBarcodeSymbology("Code128"));
+                                ICommandBuilder.BarcodeWidth barcodeWidth = (print.has("BarcodeWidth") ? getBarcodeWidth(print.getString("BarcodeWidth")): getBarcodeWidth("Mode2"));
+                                int height = (print.has("height") ? print.getInt("height"): 40);
+                                Boolean hri = (print.has("hri") ? print.getBoolean("hri"): true);
+                                int position = (print.has("absolutePosition") ? print.getInt("absolutePosition"): 0);
+                                builder.appendBarcodeWithAbsolutePosition(print.getString("appendBarcode").getBytes(encoding), barcodeSymbology, barcodeWidth, height, hri, position);
                             }
-                            builder.appendQrCodeWithAbsolutePosition(qrCode.getBytes(encoding), _qrCodeModel, _qrCodeLevel, qrCodeCell, _qrCodeLeftPadding);
+
+                        } catch (JSONException e) {
+                            _callbackContext.error(e.getMessage());
                         }
+                        if (poweredBy != null && !poweredBy.isEmpty()){
+                            Bitmap poweredByImage = createBitmapFromText(poweredBy, fontSize, paperWidth, typeface, "Center");
+                            builder.appendBitmap(poweredByImage, false);
+                        }
+
 
                         if(cutReceipt){
                             builder.appendCutPaper(CutPaperAction.PartialCutWithFeed);
@@ -1373,7 +1385,7 @@ public class StarPRNT extends CordovaPlugin {
         paint_r.getTextBounds(rightText, 0, rightText.length(), new Rect());
 
         TextPaint textPaint_r = new TextPaint(paint_r);
-        textPaint_r.setTextAlign(Paint.Align.RIGHT);
+        textPaint_r.setTextAlign(Paint.Align.LEFT);
         android.text.StaticLayout staticLayout_r = new StaticLayout(rightText, textPaint_r, printWidth, getLayoutAlignment("Opposite"), 1, 0, false);
 
         int height = staticLayout_l.getHeight() > staticLayout_r.getHeight() ? staticLayout_l.getHeight() : staticLayout_r.getHeight();
@@ -1389,8 +1401,8 @@ public class StarPRNT extends CordovaPlugin {
         canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
         canvas.translate(0, 0);
-        staticLayout_l.draw(canvas);
         staticLayout_r.draw(canvas);
+        staticLayout_l.draw(canvas);
 
         return bitmap;
     }
