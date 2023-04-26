@@ -543,9 +543,8 @@ public class StarPRNT extends CordovaPlugin {
                         
                         if(footerBase64Image != null && !footerBase64Image.isEmpty()){
                             byte[] footerbase64converted=Base64.decode(footerBase64Image,Base64.DEFAULT);                        
-                            Bitmap footer_bitmap = BitmapFactory.decodeByteArray(footerbase64converted,0,footerbase64converted.length,options);
-                            builder.appendBitmapWithAbsolutePosition(footer_bitmap, false, footerBase64ImageWidth, true, ((paperWidth - headerImageWidth) / 2));
-                            builder.appendBitmap(padding, false);
+                            Bitmap footer_bitmap = BitmapFactory.decodeByteArray(footerbase64converted,0,footerbase64converted.length);
+                            builder.appendBitmap(footer_bitmap, false, paperWidth, true);
                         }
 
 
@@ -1007,6 +1006,14 @@ public class StarPRNT extends CordovaPlugin {
                     } catch (IOException e) {
 
                     }
+                } else if (command.has("appendText")){
+                    String text = command.optString("appendText");
+                    int fontSize = command.has("fontSize") ? command.getInt("fontSize") : 25;
+                    int paperWidth = command.has("width") ? command.getInt("width") : 576;
+                    Typeface typeface = command.has("typeface") ? Typeface.create(command.getString("typeface"), Typeface.NORMAL) : Typeface.MONOSPACE;
+                    String alignment = command.has("alignment") ? command.getString("alignment") : "Normal";
+                    Bitmap image = createBitmapFromText(text, fontSize, paperWidth, typeface, alignment);
+                    builder.appendBitmap(image, false);
                 }
             }
 
