@@ -534,11 +534,8 @@ public class StarPRNT extends CordovaPlugin {
                             builder.appendBitmap(header_text, false);
                         }
 
-                        if(rightText != null && !rightText.isEmpty()){
-                            image = createBitmapFromSplitText(text, rightText, fontSize, paperWidth, typeface);
-                        } else {
-                            image = createBitmapFromText(text, fontSize, paperWidth, m_typeface, "Normal");
-                        }
+                        image = createBitmapFromText(text, fontSize, paperWidth, m_typeface, "Normal");
+
                         builder.appendBitmap(image, false);
                         
                         if(footerBase64Image != null && !footerBase64Image.isEmpty()){
@@ -1014,6 +1011,28 @@ public class StarPRNT extends CordovaPlugin {
                     String alignment = command.has("alignment") ? command.getString("alignment") : "Normal";
                     Bitmap image = createBitmapFromText(text, fontSize, paperWidth, typeface, alignment);
                     builder.appendBitmap(image, false);
+                } else if (command.has("appendTextArray")){
+                    int paperWidth = command.has("width") ? command.getInt("width") : 576;
+                    JSONArray textArray = command.getJSONArray("appendTextArray");
+                    Bitmap image = createBitmapsFromTextArray(textArray);
+                    if(image != null){
+                        if(command.has("absolutePosition") || command.has("alignment")){
+                            int position = 0;
+                            if(command.has("absolutePosition")){
+                                position = command.getInt("absolutePosition");
+                            } else if(command.has("alignment")) {
+                                String alignment = command.getString("alignment");
+                                if(alignment.equals("Opposite")){
+                                    position = paperWidth - image.getWidth();
+                                } else if(alignment.equals("Center")){
+                                    position = (paperWidth - image.getWidth()) / 2;
+                                }
+                            }
+                            builder.appendBitmapWithAbsolutePosition(image, true, position);
+                        } else {
+                            builder.appendBitmap(image, false);
+                        }
+                    }
                 }
             }
 
@@ -1370,48 +1389,43 @@ public class StarPRNT extends CordovaPlugin {
         return bitmap;
     }
 
-    private Bitmap createBitmapFromSplitText(String leftText, String rightText, int textSize, int printWidth, Typeface typeface) {
-        Paint paint_l = new Paint();
-        Paint paint_r = new Paint();
-        Bitmap bitmap_l;
-        Bitmap bitmap_r;
-        Bitmap bitmap;
-        Canvas canvas;
+    private Bitmap createBitmapsFromTextArray(JSONArray columns) {
+        Bitmap bigbitmap = null;
+        try {
+            for (int i = 0; i < columns.length(); i++) {
+                JSONObject row = (JSONObject) columns.get(i);
+                String text = row.getString("text");
+                int width = row.getInt("width");
+                int fontSize = row.has("fontSize") ? row.getInt("fontSize") : 25;
+                Typeface typeface = row.has("typeface") ? Typeface.create(row.getString("typeface"), Typeface.NORMAL) : Typeface.MONOSPACE;
+                String alignment = row.has("alignment") ? row.getString("alignment") : "Normal";
+                if(i == 0){
+                    bigbitmap = createBitmapFromText(text, fontSize, width, typeface, alignment);
+                } else {
+                    bigbitmap = combineBitmaps(bigbitmap, createBitmapFromText(text, fontSize, width, typeface, alignment));
+                }
+            }
+        } catch (JSONException e) {
 
-        paint_l.setTextSize(textSize);
-        paint_l.setTypeface(typeface);
+        }
+        return bigbitmap;
+    }
 
-        paint_l.getTextBounds(leftText, 0, leftText.length(), new Rect());
 
-        TextPaint textPaint_l = new TextPaint(paint_l);
-        android.text.StaticLayout staticLayout_l = new StaticLayout(leftText, textPaint_l, printWidth, getLayoutAlignment("Left"), 1, 0, false);
+    private Bitmap combineBitmaps(final Bitmap left, final Bitmap right){
+        // Get the size of the images combined side by side.
+        int width = left.getWidth() + right.getWidth();
+        int height = left.getHeight() > right.getHeight() ? left.getHeight() : right.getHeight();
+        // Create a Bitmap large enough to hold both input images and a canvas to draw to this
+        // combined bitmap.
+        Bitmap combined = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(combined);
 
-        paint_r.setTextSize(textSize);
-        paint_r.setTypeface(typeface);
+        // Render both input images into the combined bitmap and return it.
+        canvas.drawBitmap(left, 0f, 0f, null);
+        canvas.drawBitmap(right, left.getWidth(), 0f, null);
 
-        paint_r.getTextBounds(rightText, 0, rightText.length(), new Rect());
-
-        TextPaint textPaint_r = new TextPaint(paint_r);
-        textPaint_r.setTextAlign(Paint.Align.LEFT);
-        android.text.StaticLayout staticLayout_r = new StaticLayout(rightText, textPaint_r, printWidth, getLayoutAlignment("Opposite"), 1, 0, false);
-
-        int height = staticLayout_l.getHeight() > staticLayout_r.getHeight() ? staticLayout_l.getHeight() : staticLayout_r.getHeight();
-
-        // Create bitmap
-        bitmap_l = Bitmap.createBitmap(printWidth, height, Bitmap.Config.ARGB_8888);
-
-        // Create bitmap
-        bitmap_r = Bitmap.createBitmap(printWidth, height, Bitmap.Config.ARGB_8888);
-
-        bitmap = Bitmap.createBitmap(printWidth, height, bitmap_l.getConfig());
-
-        canvas = new Canvas(bitmap);
-        canvas.drawColor(Color.WHITE);
-        canvas.translate(0, 0);
-        staticLayout_r.draw(canvas);
-        staticLayout_l.draw(canvas);
-
-        return bitmap;
+        return combined;
     }
 
 
