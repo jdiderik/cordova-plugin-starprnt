@@ -512,7 +512,7 @@ public class StarPRNT extends CordovaPlugin {
 
                         builder.beginDocument();
                             
-                        Bitmap padding = createBitmapFromText("\n", 25, paperWidth, typeface, "Center");
+                        Bitmap padding = createBitmapFromText("\n", 25, paperWidth, typeface, "Center", false);
                         BitmapFactory.Options options = new BitmapFactory.Options();
                         options.inSampleSize = 5;
 
@@ -530,11 +530,11 @@ public class StarPRNT extends CordovaPlugin {
                         }
 
                         if(headerText != null && !headerText.isEmpty()){
-                            Bitmap header_text = createBitmapFromText(headerText, headerFontSize, paperWidth, typeface, "Center");
+                            Bitmap header_text = createBitmapFromText(headerText, headerFontSize, paperWidth, typeface, "Center", false);
                             builder.appendBitmap(header_text, false);
                         }
 
-                        image = createBitmapFromText(text, fontSize, paperWidth, m_typeface, "Normal");
+                        image = createBitmapFromText(text, fontSize, paperWidth, m_typeface, "Normal", false);
 
                         builder.appendBitmap(image, false);
                         
@@ -566,7 +566,7 @@ public class StarPRNT extends CordovaPlugin {
                             _callbackContext.error(e.getMessage());
                         }
                         if (poweredBy != null && !poweredBy.isEmpty()){
-                            Bitmap poweredByImage = createBitmapFromText(poweredBy, fontSize, paperWidth, typeface, "Center");
+                            Bitmap poweredByImage = createBitmapFromText(poweredBy, fontSize, paperWidth, typeface, "Center", false);
                             builder.appendBitmap(poweredByImage, false);
                         }
 
@@ -1007,9 +1007,11 @@ public class StarPRNT extends CordovaPlugin {
                     String text = command.optString("appendText");
                     int fontSize = command.has("fontSize") ? command.getInt("fontSize") : 25;
                     int paperWidth = command.has("width") ? command.getInt("width") : 576;
-                    Typeface typeface = command.has("typeface") ? Typeface.create(command.getString("typeface"), Typeface.NORMAL) : Typeface.MONOSPACE;
+                    int typefaceStyle = command.has("typefaceStyle") ? getTypefaceStyle(command.getString("typefaceStyle")) : Typeface.NORMAL;
+                    Typeface typeface = command.has("typeface") ? Typeface.create(command.getString("typeface"), typefaceStyle) : Typeface.MONOSPACE;
                     String alignment = command.has("alignment") ? command.getString("alignment") : "Normal";
-                    Bitmap image = createBitmapFromText(text, fontSize, paperWidth, typeface, alignment);
+                    Boolean inverted = command.has("inverted") ? command.getBoolean("inverted") : false;
+                    Bitmap image = createBitmapFromText(text, fontSize, paperWidth, typeface, alignment, inverted);
                     builder.appendBitmap(image, false);
                 } else if (command.has("appendTextArray")){
                     int paperWidth = command.has("width") ? command.getInt("width") : 576;
@@ -1033,6 +1035,13 @@ public class StarPRNT extends CordovaPlugin {
                             builder.appendBitmap(image, false);
                         }
                     }
+                } else if (command.has("drawLine")){
+                    int thickness = command.getInt("drawLine");
+                    int position = command.has("position") ? command.getInt("position") : 0;
+                    int width = command.has("width") ? command.getInt("width") : 576;
+                    int marginTop = command.has("marginTop") ? command.getInt("marginTop") : 11;
+                    int marginBottom = command.has("marginBottom") ? command.getInt("marginBottom") : 11;
+                    builder.appendBitmap(drawLine(position, width, thickness, marginTop, marginBottom), false);
                 }
             }
 
@@ -1192,6 +1201,13 @@ public class StarPRNT extends CordovaPlugin {
         else if (codePageType.equals("UTF8")) return CodePageType.UTF8;
         else if (codePageType.equals("Blank")) return CodePageType.Blank;
         else return CodePageType.CP998;
+    }
+
+    private int getTypefaceStyle(String style){
+        if(style.equals("BOLD")) return Typeface.BOLD;
+        else if(style.equals("BOLD_ITALIC")) return Typeface.BOLD_ITALIC;
+        else if(style.equals("ITALIC")) return Typeface.ITALIC;
+        else return Typeface.NORMAL;
     }
 
 
@@ -1364,10 +1380,14 @@ public class StarPRNT extends CordovaPlugin {
 
     };
 
-    private Bitmap createBitmapFromText(String printText, int textSize, int printWidth, Typeface typeface, String alignment) {
+    private Bitmap createBitmapFromText(String printText, int textSize, int printWidth, Typeface typeface, String alignment, Boolean inverted) {
         Paint paint = new Paint();
         Bitmap bitmap;
         Canvas canvas;
+
+        if(inverted){
+
+        }
 
         paint.setTextSize(textSize);
         paint.setTypeface(typeface);
@@ -1375,6 +1395,9 @@ public class StarPRNT extends CordovaPlugin {
         paint.getTextBounds(printText, 0, printText.length(), new Rect());
 
         TextPaint textPaint = new TextPaint(paint);
+        if(inverted){
+            textPaint.setColor(Color.WHITE);
+        }
         android.text.StaticLayout staticLayout = new StaticLayout(printText, textPaint, printWidth, getLayoutAlignment(alignment), 1, 0, false);
 
         // Create bitmap
@@ -1382,7 +1405,7 @@ public class StarPRNT extends CordovaPlugin {
 
         // Create canvas
         canvas = new Canvas(bitmap);
-        canvas.drawColor(Color.WHITE);
+        canvas.drawColor(inverted ? Color.BLACK : Color.WHITE);
         canvas.translate(0, 0);
         staticLayout.draw(canvas);
 
@@ -1394,15 +1417,17 @@ public class StarPRNT extends CordovaPlugin {
         try {
             for (int i = 0; i < columns.length(); i++) {
                 JSONObject row = (JSONObject) columns.get(i);
-                String text = row.getString("text");
+                String appendText = row.getString("appendText");
                 int width = row.getInt("width");
                 int fontSize = row.has("fontSize") ? row.getInt("fontSize") : 25;
-                Typeface typeface = row.has("typeface") ? Typeface.create(row.getString("typeface"), Typeface.NORMAL) : Typeface.MONOSPACE;
+                int typefaceStyle = row.has("typefaceStyle") ? getTypefaceStyle(row.getString("typefaceStyle")) : Typeface.NORMAL;
+                Typeface typeface = row.has("typeface") ? Typeface.create(row.getString("typeface"), typefaceStyle) : Typeface.MONOSPACE;
                 String alignment = row.has("alignment") ? row.getString("alignment") : "Normal";
+                Boolean inverted = row.has("inverted") ? row.getBoolean("inverted") : false;
                 if(i == 0){
-                    bigbitmap = createBitmapFromText(text, fontSize, width, typeface, alignment);
+                    bigbitmap = createBitmapFromText(appendText, fontSize, width, typeface, alignment, inverted);
                 } else {
-                    bigbitmap = combineBitmaps(bigbitmap, createBitmapFromText(text, fontSize, width, typeface, alignment));
+                    bigbitmap = combineBitmaps(bigbitmap, createBitmapFromText(appendText, fontSize, width, typeface, alignment, inverted));
                 }
             }
         } catch (JSONException e) {
@@ -1426,6 +1451,16 @@ public class StarPRNT extends CordovaPlugin {
         canvas.drawBitmap(right, left.getWidth(), 0f, null);
 
         return combined;
+    }
+
+    private Bitmap drawLine(float position, int width, int thickness, int margin_top, int margin_bottom) {
+        Bitmap bitmap = Bitmap.createBitmap(width, thickness + margin_top + margin_bottom, Bitmap.Config.ARGB_8888);
+        Paint p = new Paint();
+        p.setStrokeWidth(thickness);
+        p.setColor(Color.BLACK);
+        Canvas c = new Canvas(bitmap);
+        c.drawLine(position, margin_top, position + width, margin_top, p);
+        return bitmap;
     }
 
 
