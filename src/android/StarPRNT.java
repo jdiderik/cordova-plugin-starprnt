@@ -1003,35 +1003,16 @@ public class StarPRNT extends CordovaPlugin {
                     } catch (IOException e) {
 
                     }
-                } else if (command.has("appendText")){
-                    String text = command.optString("appendText");
-                    int fontSize = command.has("fontSize") ? command.getInt("fontSize") : 25;
-                    int paperWidth = command.has("width") ? command.getInt("width") : 576;
-                    int typefaceStyle = command.has("typefaceStyle") ? getTypefaceStyle(command.getString("typefaceStyle")) : Typeface.NORMAL;
-                    Typeface typeface = command.has("typeface") ? Typeface.create(command.getString("typeface"), typefaceStyle) : Typeface.MONOSPACE;
-                    String alignment = command.has("alignment") ? command.getString("alignment") : "Normal";
-                    Boolean inverted = command.has("inverted") ? command.getBoolean("inverted") : false;
-                    Bitmap image = createBitmapFromText(text, fontSize, paperWidth, typeface, alignment, inverted);
-                    builder.appendBitmap(image, false);
-                } else if (command.has("appendTextArray")){
-                    int paperWidth = command.has("width") ? command.getInt("width") : 576;
-                    JSONArray textArray = command.getJSONArray("appendTextArray");
-                    Bitmap image = createBitmapsFromTextArray(textArray);
+                } else if (command.has("text")){
+                    Bitmap image = createBitmapFromTextField(command);
                     if(image != null){
-                        if(command.has("absolutePosition") || command.has("alignment")){
-                            int position = 0;
-                            if(command.has("absolutePosition")){
-                                position = command.getInt("absolutePosition");
-                            } else if(command.has("alignment")) {
-                                String alignment = command.getString("alignment");
-                                if(alignment.equals("Opposite")){
-                                    position = paperWidth - image.getWidth();
-                                } else if(alignment.equals("Center")){
-                                    position = (paperWidth - image.getWidth()) / 2;
-                                }
-                            }
-                            builder.appendBitmapWithAbsolutePosition(image, true, position);
-                        } else {
+                        builder.appendBitmap(image, false);
+                    }
+                } else if (command.has("textArray")){
+                    JSONArray textArray = command.getJSONArray("textArray");
+                    if(textArray != null){
+                        Bitmap image = createBitmapFromTextArray(textArray, true);
+                        if(image != null){
                             builder.appendBitmap(image, false);
                         }
                     }
@@ -1385,10 +1366,6 @@ public class StarPRNT extends CordovaPlugin {
         Bitmap bitmap;
         Canvas canvas;
 
-        if(inverted){
-
-        }
-
         paint.setTextSize(textSize);
         paint.setTypeface(typeface);
 
@@ -1412,45 +1389,112 @@ public class StarPRNT extends CordovaPlugin {
         return bitmap;
     }
 
-    private Bitmap createBitmapsFromTextArray(JSONArray columns) {
-        Bitmap bigbitmap = null;
+    private Bitmap createBitmapFromTextArray(JSONArray data, Boolean isHorizontal) {
+        final ArrayList<Bitmap> bitmaps = new ArrayList<Bitmap>();
+        Bitmap bitmap;
         try {
-            for (int i = 0; i < columns.length(); i++) {
-                JSONObject row = (JSONObject) columns.get(i);
-                String appendText = row.getString("appendText");
-                int width = row.getInt("width");
-                int fontSize = row.has("fontSize") ? row.getInt("fontSize") : 25;
-                int typefaceStyle = row.has("typefaceStyle") ? getTypefaceStyle(row.getString("typefaceStyle")) : Typeface.NORMAL;
-                Typeface typeface = row.has("typeface") ? Typeface.create(row.getString("typeface"), typefaceStyle) : Typeface.MONOSPACE;
-                String alignment = row.has("alignment") ? row.getString("alignment") : "Normal";
-                Boolean inverted = row.has("inverted") ? row.getBoolean("inverted") : false;
-                if(i == 0){
-                    bigbitmap = createBitmapFromText(appendText, fontSize, width, typeface, alignment, inverted);
-                } else {
-                    bigbitmap = combineBitmaps(bigbitmap, createBitmapFromText(appendText, fontSize, width, typeface, alignment, inverted));
+            for (int i = 0; i < data.length(); i++) {
+                JSONObject field = (JSONObject) data.get(i);
+                bitmap = null;
+                String text = null;
+                try {
+                    text = field.getString("text");
+                } catch (JSONException e) {
+                }
+                if (text != null) {
+                    bitmap = createBitmapFromTextField(field);
+                } else if(field.has("textArray")) {
+                    try {
+                        JSONArray textArray = field.getJSONArray("textArray");
+                        bitmap = createBitmapFromTextArray(textArray, !isHorizontal);
+                    } catch (JSONException e) {
+                    }
+                    if(bitmap != null){
+                        int paperWidth = field.has("width") ? field.getInt("width") : 576;
+                        if(field.has("absolutePosition") || field.has("alignment")){
+                            int position = 0;
+                            if(field.has("absolutePosition")){
+                                position = field.getInt("absolutePosition");
+                            } else if(field.has("alignment")) {
+                                String alignment = field.getString("alignment");
+                                if(alignment.equals("Opposite")){
+                                    position = paperWidth - bitmap.getWidth();
+                                } else if(alignment.equals("Center")){
+                                    position = (paperWidth - bitmap.getWidth()) / 2;
+                                }
+                            }
+                            if(position > 0){
+                                bitmap = marginLeft(bitmap, position);
+                            }
+                        }
+                    }
+                }
+                if(bitmap != null){
+                    bitmaps.add(bitmap);
                 }
             }
         } catch (JSONException e) {
 
         }
-        return bigbitmap;
+        if(bitmaps.size() > 0){
+            return combineBitmaps(bitmaps, isHorizontal);
+        }
+        return null;
     }
 
+    private Bitmap createBitmapFromTextField(JSONObject field) {
+        Bitmap bitmap = null;
+        try {
+            String text = field.getString("text");
+            int width = field.has("width") ? field.getInt("width") : 576;
+            int fontSize = field.has("fontSize") ? field.getInt("fontSize") : 25;
+            int typefaceStyle = field.has("typefaceStyle") ? getTypefaceStyle(field.getString("typefaceStyle")) : Typeface.NORMAL;
+            Typeface typeface = field.has("typeface") ? Typeface.create(field.getString("typeface"), typefaceStyle) : Typeface.MONOSPACE;
+            String alignment = field.has("alignment") ? field.getString("alignment") : "Normal";
+            Boolean inverted = field.has("inverted") ? field.getBoolean("inverted") : false;
+            
+            bitmap = createBitmapFromText(text, fontSize, width, typeface, alignment, inverted);
+        } catch (JSONException e) {
+            Log.d("createBitmapFromTextField error", field.toString());
+        }
+        return bitmap;
+    }
 
-    private Bitmap combineBitmaps(final Bitmap left, final Bitmap right){
-        // Get the size of the images combined side by side.
-        int width = left.getWidth() + right.getWidth();
-        int height = left.getHeight() > right.getHeight() ? left.getHeight() : right.getHeight();
-        // Create a Bitmap large enough to hold both input images and a canvas to draw to this
-        // combined bitmap.
-        Bitmap combined = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(combined);
+    private Bitmap combineBitmaps(ArrayList<Bitmap> bitmaps, Boolean isHorizontal) {
+		int w = 0, h = 0;
+		for (int i = 0; i < bitmaps.size(); i++) {
+            if(i == 0 || isHorizontal){
+			    w += bitmaps.get(i).getWidth();
+            } else if(!isHorizontal && bitmaps.get(i).getWidth() > w) {
+			    w = bitmaps.get(i).getWidth();
+            }
+            if(i == 0 || !isHorizontal){
+			    h += bitmaps.get(i).getHeight();
+            } else if(isHorizontal && bitmaps.get(i).getHeight() > h) {
+			    h = bitmaps.get(i).getHeight();
+            }
+		}
+		Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+		Canvas canvas = new Canvas(bitmap);
+		int pos = 0;
+		for (int i = 0; i < bitmaps.size(); i++) {
+			Log.d("HTML", "Combine: "+i+"/"+bitmaps.size()+1);
+			if(isHorizontal){
+                canvas.drawBitmap(bitmaps.get(i), pos, 0f, null);
+            } else {
+                canvas.drawBitmap(bitmaps.get(i), 0f, pos, null);
+            }
+            pos += isHorizontal ? bitmaps.get(i).getWidth() : bitmaps.get(i).getHeight();
+		}
+		return bitmap;
+	}
 
-        // Render both input images into the combined bitmap and return it.
-        canvas.drawBitmap(left, 0f, 0f, null);
-        canvas.drawBitmap(right, left.getWidth(), 0f, null);
-
-        return combined;
+    private Bitmap marginLeft(Bitmap bitmap, int margin) {
+        Bitmap padded = Bitmap.createBitmap(bitmap.getWidth() + margin, bitmap.getHeight(), bitmap.getConfig());
+        Canvas canvas = new Canvas(padded);
+        canvas.drawColor(bitmap.getPixel(1, 1));
+        canvas.drawBitmap(bitmap, margin, 0f, null);
+        return padded;
     }
 
     private Bitmap drawLine(float position, int width, int thickness, int margin_top, int margin_bottom) {
