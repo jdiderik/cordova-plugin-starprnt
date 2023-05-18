@@ -504,15 +504,14 @@ public class StarPRNT extends CordovaPlugin {
 
                         Bitmap image;
 
-                        Typeface typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL);
-                        Typeface m_typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL);
+                        String typeface = "DEFAULT";
+                        String m_typeface = "MONOSPACE";
                         Charset encoding = Charset.forName("US-ASCII");
 
                         ICommandBuilder builder = StarIoExt.createCommandBuilder(_emulation);
 
                         builder.beginDocument();
-                            
-                        Bitmap padding = createBitmapFromText("\n", 25, paperWidth, typeface, "Center", false);
+                        Bitmap padding = createBitmapFromText("\n", 25, new JSONObject());
                         BitmapFactory.Options options = new BitmapFactory.Options();
                         options.inSampleSize = 5;
 
@@ -530,11 +529,27 @@ public class StarPRNT extends CordovaPlugin {
                         }
 
                         if(headerText != null && !headerText.isEmpty()){
-                            Bitmap header_text = createBitmapFromText(headerText, headerFontSize, paperWidth, typeface, "Center", false);
+                            JSONObject header_text_config = new JSONObject();
+                            try{
+                                header_text_config.put("paperWidth", paperWidth);
+                                header_text_config.put("typeface", typeface);
+                                header_text_config.put("alignment", "Center");
+                            } catch (JSONException e) {
+                                _callbackContext.error(e.getMessage());
+                            }
+                            Bitmap header_text = createBitmapFromText(headerText, headerFontSize, header_text_config);
                             builder.appendBitmap(header_text, false);
                         }
 
-                        image = createBitmapFromText(text, fontSize, paperWidth, m_typeface, "Normal", false);
+                        JSONObject text_config = new JSONObject();
+                        try{
+                            text_config.put("paperWidth", paperWidth);
+                            text_config.put("typeface", m_typeface);
+                            text_config.put("alignment", "Normal");
+                        } catch (JSONException e) {
+                            _callbackContext.error(e.getMessage());
+                        }
+                        image = createBitmapFromText(text, fontSize, text_config);
 
                         builder.appendBitmap(image, false);
                         
@@ -566,7 +581,15 @@ public class StarPRNT extends CordovaPlugin {
                             _callbackContext.error(e.getMessage());
                         }
                         if (poweredBy != null && !poweredBy.isEmpty()){
-                            Bitmap poweredByImage = createBitmapFromText(poweredBy, fontSize, paperWidth, typeface, "Center", false);
+                            JSONObject powered_config = new JSONObject();
+                            try{
+                                powered_config.put("paperWidth", paperWidth);
+                                powered_config.put("typeface", typeface);
+                                powered_config.put("alignment", "Center");
+                            } catch (JSONException e) {
+                                _callbackContext.error(e.getMessage());
+                            }
+                            Bitmap poweredByImage = createBitmapFromText(poweredBy, fontSize, powered_config);
                             builder.appendBitmap(poweredByImage, false);
                         }
 
@@ -1191,6 +1214,14 @@ public class StarPRNT extends CordovaPlugin {
         else return Typeface.NORMAL;
     }
 
+    private Typeface getTypeface(String style){
+        if(style.equals("SERIF")) return Typeface.SERIF;
+        if(style.equals("SANS_SERIF")) return Typeface.SANS_SERIF;
+        else if(style.equals("MONOSPACE")) return Typeface.MONOSPACE;
+        else if(style.equals("DEFAULT_BOLD")) return Typeface.DEFAULT_BOLD;
+        else return Typeface.DEFAULT;
+    }
+
 
     //Helper functions
 
@@ -1361,29 +1392,83 @@ public class StarPRNT extends CordovaPlugin {
 
     };
 
-    private Bitmap createBitmapFromText(String printText, int textSize, int printWidth, Typeface typeface, String alignment, Boolean inverted) {
+    private Bitmap createBitmapFromText(String printText, int textSize, JSONObject config) {
+        int printWidth = 576;
+        int typefaceStyle = Typeface.NORMAL;
+        Typeface typeface = null;
+        String alignment = "Normal";
+        Boolean inverted = false;
+        int paddingTop = 0;
+        int paddingRight = 0;
+        int paddingBottom = 0;
+        int paddingLeft = 0;
+        try{
+            if(config.has("width") ){
+                printWidth = config.getInt("width");
+            }
+            if(config.has("typefaceStyle") ){
+                typefaceStyle = getTypefaceStyle(config.getString("typefaceStyle"));
+            }
+            if(config.has("typeface") ){
+                typeface = Typeface.create(getTypeface(config.getString("typeface")), typefaceStyle);
+            }
+            if(config.has("alignment") ){
+                alignment = config.getString("alignment");
+            }
+            if(config.has("inverted") ){
+                inverted = config.getBoolean("inverted");
+            }
+            if(config.has("paddingTop") ){
+                paddingTop = config.getInt("paddingTop");
+            }
+            if(config.has("paddingRight") ){
+                paddingRight = config.getInt("paddingRight");
+            }
+            if(config.has("paddingBottom") ){
+                paddingBottom = config.getInt("paddingBottom");
+            }
+            if(config.has("paddingLeft") ){
+                paddingLeft = config.getInt("paddingLeft");
+            }
+        } catch (JSONException e) {
+            _callbackContext.error(e.getMessage());
+            return null;
+        }
+        if(typeface == null){
+            typeface = Typeface.create(Typeface.DEFAULT, typefaceStyle);
+        }
+        
         Paint paint = new Paint();
         Bitmap bitmap;
         Canvas canvas;
 
         paint.setTextSize(textSize);
         paint.setTypeface(typeface);
-
+        int maxTextWidth = printWidth - (paddingLeft + paddingRight);
         paint.getTextBounds(printText, 0, printText.length(), new Rect());
 
         TextPaint textPaint = new TextPaint(paint);
         if(inverted){
             textPaint.setColor(Color.WHITE);
         }
-        android.text.StaticLayout staticLayout = new StaticLayout(printText, textPaint, printWidth, getLayoutAlignment(alignment), 1, 0, false);
+        android.text.StaticLayout staticLayout = new StaticLayout(printText, textPaint, maxTextWidth, getLayoutAlignment(alignment), 1, 0, false);
 
+        // Calculate the required width and height of the text
+        int textWidth = staticLayout.getWidth();
+        int textHeight = staticLayout.getHeight();
+
+        // Calculate the final width and height of the bitmap
+        int width = textWidth + paddingLeft + paddingRight;
+        int height = textHeight + paddingTop + paddingBottom;
         // Create bitmap
-        bitmap = Bitmap.createBitmap(staticLayout.getWidth(), staticLayout.getHeight(), Bitmap.Config.ARGB_8888);
+        bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
 
+        float x = paddingLeft;
+        float y = paddingTop;
         // Create canvas
         canvas = new Canvas(bitmap);
         canvas.drawColor(inverted ? Color.BLACK : Color.WHITE);
-        canvas.translate(0, 0);
+        canvas.translate(x, y);
         staticLayout.draw(canvas);
 
         return bitmap;
@@ -1446,14 +1531,8 @@ public class StarPRNT extends CordovaPlugin {
         Bitmap bitmap = null;
         try {
             String text = field.getString("text");
-            int width = field.has("width") ? field.getInt("width") : 576;
             int fontSize = field.has("fontSize") ? field.getInt("fontSize") : 25;
-            int typefaceStyle = field.has("typefaceStyle") ? getTypefaceStyle(field.getString("typefaceStyle")) : Typeface.NORMAL;
-            Typeface typeface = field.has("typeface") ? Typeface.create(field.getString("typeface"), typefaceStyle) : Typeface.MONOSPACE;
-            String alignment = field.has("alignment") ? field.getString("alignment") : "Normal";
-            Boolean inverted = field.has("inverted") ? field.getBoolean("inverted") : false;
-            
-            bitmap = createBitmapFromText(text, fontSize, width, typeface, alignment, inverted);
+            bitmap = createBitmapFromText(text, fontSize, field);
         } catch (JSONException e) {
             Log.d("createBitmapFromTextField error", field.toString());
         }
