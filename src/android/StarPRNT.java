@@ -72,7 +72,7 @@ public class StarPRNT extends CordovaPlugin {
 
     private StarIoExtManager starIoExtManager;
 
-    private String INTENT_ACTION_GRANT_USB;
+    private String ACTION_USB_PERMISSION;
     private enum UsbPermission { Unknown, Requested, Granted, Denied }
     private UsbPermission usbPermission = UsbPermission.Unknown;
     private UsbDevice usbDevice;
@@ -85,13 +85,13 @@ public class StarPRNT extends CordovaPlugin {
 	public void initialize(CordovaInterface cordova, CordovaWebView webView) {
 		super.initialize(cordova, webView);
 		this.cordova = cordova;
-		this.INTENT_ACTION_GRANT_USB = cordova.getActivity().getPackageName() + ".GRANT_USB";
+		this.ACTION_USB_PERMISSION = cordova.getActivity().getPackageName() + ".USB_PERMISSION";
         this.broadcastReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 Log.d(TAG, "Broadcast onreceive" + intent.toString());
 
-                if (INTENT_ACTION_GRANT_USB.equals(intent.getAction())) {
+                if (ACTION_USB_PERMISSION.equals(intent.getAction())) {
                     synchronized (this) {
                         usbDevice = (UsbDevice)intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                         usbPermission = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) ?
@@ -111,8 +111,8 @@ public class StarPRNT extends CordovaPlugin {
             }
         };
         this.usbManager = (UsbManager) cordova.getActivity().getSystemService(Context.USB_SERVICE);
-        this.pendingIntent = PendingIntent.getBroadcast(cordova.getContext(), 0, new Intent(INTENT_ACTION_GRANT_USB), 0);
-        intentFilter = new IntentFilter(INTENT_ACTION_GRANT_USB);
+        this.pendingIntent = PendingIntent.getBroadcast(cordova.getContext(), 0, new Intent(ACTION_USB_PERMISSION), 0);
+        intentFilter = new IntentFilter(ACTION_USB_PERMISSION);
         cordova.getActivity().registerReceiver(this.broadcastReceiver, intentFilter);
     }
 
