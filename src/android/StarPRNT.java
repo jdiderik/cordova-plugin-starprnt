@@ -163,7 +163,11 @@ public class StarPRNT extends CordovaPlugin {
             String portSettings = getPortSettingsOption(portName, args.getString(1));
             Emulation emulation = getEmulation(args.getString(1));
             String printObj = args.getString(2);
-            this.printRasterReceipt(portName, portSettings, emulation, printObj, callbackContext);
+            try {
+                this.printRasterReceipt(portName, portSettings, emulation, printObj, callbackContext);
+            } catch (IOException e) {
+               // e.printStackTrace();
+            }
             return true;
         } else if (action.equals("printBase64Image")) {
             String portName = args.getString(0);
@@ -547,33 +551,125 @@ public class StarPRNT extends CordovaPlugin {
                     }
                 });
     }
-    private void printRasterReceipt(String portName, String portSettings, Emulation emulation, String printObj, CallbackContext callbackContext) throws JSONException {
+    private void printRasterReceipt(String portName, String portSettings, Emulation emulation, String printObj, CallbackContext callbackContext) throws IOException, JSONException {
 
         final Context context = this.cordova.getActivity();
+        final ContentResolver contentResolver = context.getContentResolver();
         final String _portName = portName;
         final String _portSettings = portSettings;
         final Emulation _emulation = emulation;
         final JSONObject print = new JSONObject(printObj);
         final String text = print.getString("text");
+        final String poweredBy = (print.has("poweredBy")) ? print.getString("poweredBy") : null;
+        final String headerImage = (print.has("headerImage")) ? print.getString("headerImage") : null;
+        final String rightText = (print.has("rightText")) ? print.getString("rightText") : null;
+        final int headerImageWidth = (print.has("headerImageWidth")) ? print.getInt("headerImageWidth") : 576;
+        final String headerText = (print.has("headerText")) ? print.getString("headerText") : null;
+        final int headerFontSize = (print.has("headerFontSize")) ? print.getInt("headerFontSize") : 25;
         final int fontSize = (print.has("fontSize")) ? print.getInt("fontSize") : 25;
         final int paperWidth = (print.has("paperWidth")) ? print.getInt("paperWidth"): 576;
         final Boolean cutReceipt = (print.has("cutReceipt") ? print.getBoolean("cutReceipt"): true);
         final Boolean openCashDrawer = (print.has("openCashDrawer")) ? print.getBoolean("openCashDrawer") : true;
         final CallbackContext _callbackContext = callbackContext;
+        final String footerBase64Image = (print.has("footerBase64Image")) ? print.getString("footerBase64Image") : null;
+        final String qrCode = (print.has("appendQrCode") ? print.getString("appendQrCode"): null);
+        final int footerBase64ImageWidth = (print.has("footerBase64ImageWidth")) ? print.getInt("footerBase64ImageWidth") : 576;
 
         cordova.getThreadPool()
                 .execute(new Runnable() {
                     public void run() {
 
-                        Typeface typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL);
+                        Bitmap image;
+
+                        String typeface = "DEFAULT";
+                        String m_typeface = "MONOSPACE";
+                        Charset encoding = Charset.forName("US-ASCII");
 
                         ICommandBuilder builder = StarIoExt.createCommandBuilder(_emulation);
 
                         builder.beginDocument();
+                        Bitmap padding = createBitmapFromText("\n", 25, new JSONObject());
+                        BitmapFactory.Options options = new BitmapFactory.Options();
+                        options.inSampleSize = 5;
 
-                        Bitmap image = createBitmapFromText(text, fontSize, paperWidth, typeface);
+                        if(headerImage != null && !headerImage.isEmpty()){
+                            Uri imageUri = null;
+                            Bitmap header_logo_bitmap = null;
+                            try {
+                                imageUri =  Uri.parse(headerImage);
+                                header_logo_bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri);
+                            } catch (IOException e) {
+                                _callbackContext.error(e.getMessage());
+                            }
+                            builder.appendBitmapWithAbsolutePosition(header_logo_bitmap, false, headerImageWidth, true, ((paperWidth - headerImageWidth) / 2));
+                            builder.appendBitmap(padding, false);
+                        }
+
+                        if(headerText != null && !headerText.isEmpty()){
+                            JSONObject header_text_config = new JSONObject();
+                            try{
+                                header_text_config.put("paperWidth", paperWidth);
+                                header_text_config.put("typeface", typeface);
+                                header_text_config.put("alignment", "Center");
+                            } catch (JSONException e) {
+                                _callbackContext.error(e.getMessage());
+                            }
+                            Bitmap header_text = createBitmapFromText(headerText, headerFontSize, header_text_config);
+                            builder.appendBitmap(header_text, false);
+                        }
+
+                        JSONObject text_config = new JSONObject();
+                        try{
+                            text_config.put("paperWidth", paperWidth);
+                            text_config.put("typeface", m_typeface);
+                            text_config.put("alignment", "Normal");
+                        } catch (JSONException e) {
+                            _callbackContext.error(e.getMessage());
+                        }
+                        image = createBitmapFromText(text, fontSize, text_config);
 
                         builder.appendBitmap(image, false);
+                        
+                        if(footerBase64Image != null && !footerBase64Image.isEmpty()){
+                            byte[] footerbase64converted=Base64.decode(footerBase64Image,Base64.DEFAULT);                        
+                            Bitmap footer_bitmap = BitmapFactory.decodeByteArray(footerbase64converted,0,footerbase64converted.length);
+                            builder.appendBitmap(footer_bitmap, false, paperWidth, true);
+                        }
+
+
+                        try {
+                            
+                            if (print.has("appendQrCode")){
+                                ICommandBuilder.QrCodeModel qrCodeModel =  (print.has("QrCodeModel") ? getQrCodeModel(print.getString("QrCodeModel")): getQrCodeModel("No2"));
+                                ICommandBuilder.QrCodeLevel qrCodeLevel = (print.has("QrCodeLevel") ? getQrCodeLevel(print.getString("QrCodeLevel")): getQrCodeLevel("H"));
+                                int cell = (print.has("cell") ? print.getInt("cell"): 4);
+                                int position = (print.has("absolutePosition") ? print.getInt("absolutePosition") : 0);
+                                builder.appendQrCodeWithAbsolutePosition(print.getString("appendQrCode").getBytes(encoding), qrCodeModel, qrCodeLevel, cell, position);
+                            } else if (print.has("appendBarcode")){
+                                ICommandBuilder.BarcodeSymbology barcodeSymbology = (print.has("BarcodeSymbology") ? getBarcodeSymbology(print.getString("BarcodeSymbology")): getBarcodeSymbology("Code128"));
+                                ICommandBuilder.BarcodeWidth barcodeWidth = (print.has("BarcodeWidth") ? getBarcodeWidth(print.getString("BarcodeWidth")): getBarcodeWidth("Mode2"));
+                                int height = (print.has("height") ? print.getInt("height"): 40);
+                                Boolean hri = (print.has("hri") ? print.getBoolean("hri"): true);
+                                int position = (print.has("absolutePosition") ? print.getInt("absolutePosition"): 0);
+                                builder.appendBarcodeWithAbsolutePosition(print.getString("appendBarcode").getBytes(encoding), barcodeSymbology, barcodeWidth, height, hri, position);
+                            }
+
+                        } catch (JSONException e) {
+                            _callbackContext.error(e.getMessage());
+                        }
+                        if (poweredBy != null && !poweredBy.isEmpty()){
+                            JSONObject powered_config = new JSONObject();
+                            try{
+                                powered_config.put("paperWidth", paperWidth);
+                                powered_config.put("typeface", typeface);
+                                powered_config.put("alignment", "Center");
+                            } catch (JSONException e) {
+                                _callbackContext.error(e.getMessage());
+                            }
+                            Bitmap poweredByImage = createBitmapFromText(poweredBy, fontSize, powered_config);
+                            builder.appendBitmap(poweredByImage, false);
+                        }
+
 
                         if(cutReceipt){
                             builder.appendCutPaper(CutPaperAction.PartialCutWithFeed);
@@ -1007,6 +1103,26 @@ public class StarPRNT extends CordovaPlugin {
                     } catch (IOException e) {
 
                     }
+                } else if (command.has("text")){
+                    Bitmap image = createBitmapFromTextField(command);
+                    if(image != null){
+                        builder.appendBitmap(image, false);
+                    }
+                } else if (command.has("textArray")){
+                    JSONArray textArray = command.getJSONArray("textArray");
+                    if(textArray != null){
+                        Bitmap image = createBitmapFromTextArray(textArray, true);
+                        if(image != null){
+                            builder.appendBitmap(image, false);
+                        }
+                    }
+                } else if (command.has("drawLine")){
+                    int thickness = command.getInt("drawLine");
+                    int position = command.has("position") ? command.getInt("position") : 0;
+                    int width = command.has("width") ? command.getInt("width") : 576;
+                    int marginTop = command.has("marginTop") ? command.getInt("marginTop") : 11;
+                    int marginBottom = command.has("marginBottom") ? command.getInt("marginBottom") : 11;
+                    builder.appendBitmap(drawLine(position, width, thickness, marginTop, marginBottom), false);
                 }
             }
 
@@ -1042,6 +1158,12 @@ public class StarPRNT extends CordovaPlugin {
         else if(alignment.equals("Center")) return ICommandBuilder.AlignmentPosition.Center;
         else if(alignment.equals("Right")) return ICommandBuilder.AlignmentPosition.Right;
         else return ICommandBuilder.AlignmentPosition.Left;
+    }
+
+    private Layout.Alignment getLayoutAlignment(String alignment){
+        if(alignment.equals("Opposite")) return Layout.Alignment.ALIGN_OPPOSITE;
+        else if(alignment.equals("Center")) return Layout.Alignment.ALIGN_CENTER;
+        else return Layout.Alignment.ALIGN_NORMAL;
     }
 
     private ICommandBuilder.BarcodeSymbology getBarcodeSymbology(String barcodeSymbology){
@@ -1160,6 +1282,21 @@ public class StarPRNT extends CordovaPlugin {
         else if (codePageType.equals("UTF8")) return CodePageType.UTF8;
         else if (codePageType.equals("Blank")) return CodePageType.Blank;
         else return CodePageType.CP998;
+    }
+
+    private int getTypefaceStyle(String style){
+        if(style.equals("BOLD")) return Typeface.BOLD;
+        else if(style.equals("BOLD_ITALIC")) return Typeface.BOLD_ITALIC;
+        else if(style.equals("ITALIC")) return Typeface.ITALIC;
+        else return Typeface.NORMAL;
+    }
+
+    private Typeface getTypeface(String style){
+        if(style.equals("SERIF")) return Typeface.SERIF;
+        if(style.equals("SANS_SERIF")) return Typeface.SANS_SERIF;
+        else if(style.equals("MONOSPACE")) return Typeface.MONOSPACE;
+        else if(style.equals("DEFAULT_BOLD")) return Typeface.DEFAULT_BOLD;
+        else return Typeface.DEFAULT;
     }
 
 
@@ -1332,28 +1469,197 @@ public class StarPRNT extends CordovaPlugin {
 
     };
 
-    private Bitmap createBitmapFromText(String printText, int textSize, int printWidth, Typeface typeface) {
+    private Bitmap createBitmapFromText(String printText, int textSize, JSONObject config) {
+        int printWidth = 576;
+        int typefaceStyle = Typeface.NORMAL;
+        Typeface typeface = null;
+        String alignment = "Normal";
+        Boolean inverted = false;
+        int paddingTop = 0;
+        int paddingRight = 0;
+        int paddingBottom = 0;
+        int paddingLeft = 0;
+        try{
+            if(config.has("width") ){
+                printWidth = config.getInt("width");
+            }
+            if(config.has("typefaceStyle") ){
+                typefaceStyle = getTypefaceStyle(config.getString("typefaceStyle"));
+            }
+            if(config.has("typeface") ){
+                typeface = Typeface.create(getTypeface(config.getString("typeface")), typefaceStyle);
+            }
+            if(config.has("alignment") ){
+                alignment = config.getString("alignment");
+            }
+            if(config.has("inverted") ){
+                inverted = config.getBoolean("inverted");
+            }
+            if(config.has("paddingTop") ){
+                paddingTop = config.getInt("paddingTop");
+            }
+            if(config.has("paddingRight") ){
+                paddingRight = config.getInt("paddingRight");
+            }
+            if(config.has("paddingBottom") ){
+                paddingBottom = config.getInt("paddingBottom");
+            }
+            if(config.has("paddingLeft") ){
+                paddingLeft = config.getInt("paddingLeft");
+            }
+        } catch (JSONException e) {
+            _callbackContext.error(e.getMessage());
+            return null;
+        }
+        if(typeface == null){
+            typeface = Typeface.create(Typeface.DEFAULT, typefaceStyle);
+        }
+        
         Paint paint = new Paint();
         Bitmap bitmap;
         Canvas canvas;
 
         paint.setTextSize(textSize);
         paint.setTypeface(typeface);
-
+        int maxTextWidth = printWidth - (paddingLeft + paddingRight);
         paint.getTextBounds(printText, 0, printText.length(), new Rect());
 
         TextPaint textPaint = new TextPaint(paint);
-        android.text.StaticLayout staticLayout = new StaticLayout(printText, textPaint, printWidth, Layout.Alignment.ALIGN_NORMAL, 1, 0, false);
+        if(inverted){
+            textPaint.setColor(Color.WHITE);
+        }
+        android.text.StaticLayout staticLayout = new StaticLayout(printText, textPaint, maxTextWidth, getLayoutAlignment(alignment), 1, 0, false);
 
+        // Calculate the required width and height of the text
+        int textWidth = staticLayout.getWidth();
+        int textHeight = staticLayout.getHeight();
+
+        // Calculate the final width and height of the bitmap
+        int width = textWidth + paddingLeft + paddingRight;
+        int height = textHeight + paddingTop + paddingBottom;
         // Create bitmap
-        bitmap = Bitmap.createBitmap(staticLayout.getWidth(), staticLayout.getHeight(), Bitmap.Config.ARGB_8888);
+        bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
 
+        float x = paddingLeft;
+        float y = paddingTop;
         // Create canvas
         canvas = new Canvas(bitmap);
-        canvas.drawColor(Color.WHITE);
-        canvas.translate(0, 0);
+        canvas.drawColor(inverted ? Color.BLACK : Color.WHITE);
+        canvas.translate(x, y);
         staticLayout.draw(canvas);
 
+        return bitmap;
+    }
+
+    private Bitmap createBitmapFromTextArray(JSONArray data, Boolean isHorizontal) {
+        final ArrayList<Bitmap> bitmaps = new ArrayList<Bitmap>();
+        Bitmap bitmap;
+        try {
+            for (int i = 0; i < data.length(); i++) {
+                JSONObject field = (JSONObject) data.get(i);
+                bitmap = null;
+                String text = null;
+                try {
+                    text = field.getString("text");
+                } catch (JSONException e) {
+                }
+                if (text != null) {
+                    bitmap = createBitmapFromTextField(field);
+                } else if(field.has("textArray")) {
+                    try {
+                        JSONArray textArray = field.getJSONArray("textArray");
+                        bitmap = createBitmapFromTextArray(textArray, !isHorizontal);
+                    } catch (JSONException e) {
+                    }
+                    if(bitmap != null){
+                        int paperWidth = field.has("width") ? field.getInt("width") : 576;
+                        if(field.has("absolutePosition") || field.has("alignment")){
+                            int position = 0;
+                            if(field.has("absolutePosition")){
+                                position = field.getInt("absolutePosition");
+                            } else if(field.has("alignment")) {
+                                String alignment = field.getString("alignment");
+                                if(alignment.equals("Opposite")){
+                                    position = paperWidth - bitmap.getWidth();
+                                } else if(alignment.equals("Center")){
+                                    position = (paperWidth - bitmap.getWidth()) / 2;
+                                }
+                            }
+                            if(position > 0){
+                                bitmap = marginLeft(bitmap, position);
+                            }
+                        }
+                    }
+                }
+                if(bitmap != null){
+                    bitmaps.add(bitmap);
+                }
+            }
+        } catch (JSONException e) {
+
+        }
+        if(bitmaps.size() > 0){
+            return combineBitmaps(bitmaps, isHorizontal);
+        }
+        return null;
+    }
+
+    private Bitmap createBitmapFromTextField(JSONObject field) {
+        Bitmap bitmap = null;
+        try {
+            String text = field.getString("text");
+            int fontSize = field.has("fontSize") ? field.getInt("fontSize") : 25;
+            bitmap = createBitmapFromText(text, fontSize, field);
+        } catch (JSONException e) {
+            Log.d("createBitmapFromTextField error", field.toString());
+        }
+        return bitmap;
+    }
+
+    private Bitmap combineBitmaps(ArrayList<Bitmap> bitmaps, Boolean isHorizontal) {
+		int w = 0, h = 0;
+		for (int i = 0; i < bitmaps.size(); i++) {
+            if(i == 0 || isHorizontal){
+			    w += bitmaps.get(i).getWidth();
+            } else if(!isHorizontal && bitmaps.get(i).getWidth() > w) {
+			    w = bitmaps.get(i).getWidth();
+            }
+            if(i == 0 || !isHorizontal){
+			    h += bitmaps.get(i).getHeight();
+            } else if(isHorizontal && bitmaps.get(i).getHeight() > h) {
+			    h = bitmaps.get(i).getHeight();
+            }
+		}
+		Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+		Canvas canvas = new Canvas(bitmap);
+		int pos = 0;
+		for (int i = 0; i < bitmaps.size(); i++) {
+			Log.d("HTML", "Combine: "+i+"/"+bitmaps.size()+1);
+			if(isHorizontal){
+                canvas.drawBitmap(bitmaps.get(i), pos, 0f, null);
+            } else {
+                canvas.drawBitmap(bitmaps.get(i), 0f, pos, null);
+            }
+            pos += isHorizontal ? bitmaps.get(i).getWidth() : bitmaps.get(i).getHeight();
+		}
+		return bitmap;
+	}
+
+    private Bitmap marginLeft(Bitmap bitmap, int margin) {
+        Bitmap padded = Bitmap.createBitmap(bitmap.getWidth() + margin, bitmap.getHeight(), bitmap.getConfig());
+        Canvas canvas = new Canvas(padded);
+        canvas.drawColor(bitmap.getPixel(1, 1));
+        canvas.drawBitmap(bitmap, margin, 0f, null);
+        return padded;
+    }
+
+    private Bitmap drawLine(float position, int width, int thickness, int margin_top, int margin_bottom) {
+        Bitmap bitmap = Bitmap.createBitmap(width, thickness + margin_top + margin_bottom, Bitmap.Config.ARGB_8888);
+        Paint p = new Paint();
+        p.setStrokeWidth(thickness);
+        p.setColor(Color.BLACK);
+        Canvas c = new Canvas(bitmap);
+        c.drawLine(position, margin_top, position + width, margin_top, p);
         return bitmap;
     }
 
