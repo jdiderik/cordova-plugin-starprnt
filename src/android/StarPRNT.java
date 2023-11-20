@@ -1016,32 +1016,27 @@ public class StarPRNT extends CordovaPlugin {
                     try {
                         Uri imageUri =  Uri.parse(uriString);
                         Bitmap bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri);
-                        if(bitmap != null){
-                            bitmap = resizeBitmapTo203DPI(bitmap);
-                            if(command.has("absolutePosition")){
-                                int position =  command.getInt("absolutePosition");
-                                builder.appendBitmapWithAbsolutePosition(bitmap, diffusion, width, bothScale, rotation, position);
-                            }else if(command.has("alignment")){
-                                ICommandBuilder.AlignmentPosition alignmentPosition = getAlignment(command.getString("alignment"));
-                                builder.appendBitmapWithAlignment(bitmap, diffusion, width, bothScale, rotation, alignmentPosition);
-                            }else builder.appendBitmap(bitmap, diffusion, width, bothScale, rotation);
-                        }
+                        if(command.has("absolutePosition")){
+                            int position =  command.getInt("absolutePosition");
+                            builder.appendBitmapWithAbsolutePosition(bitmap, diffusion, width, bothScale, rotation, position);
+                        }else if(command.has("alignment")){
+                            ICommandBuilder.AlignmentPosition alignmentPosition = getAlignment(command.getString("alignment"));
+                            builder.appendBitmapWithAlignment(bitmap, diffusion, width, bothScale, rotation, alignmentPosition);
+                        }else builder.appendBitmap(bitmap, diffusion, width, bothScale, rotation);
                     } catch (IOException e) {
 
                     }
                 } else if (command.has("text")){
                     Bitmap image = createBitmapFromTextField(command);
                     if(image != null){
-                        Bitmap resizedImage = resizeBitmapTo203DPI(image);
-                        builder.appendBitmap(resizedImage, false);
+                        builder.appendBitmap(image, false);
                     }
                 } else if (command.has("textArray")){
                     JSONArray textArray = command.getJSONArray("textArray");
                     if(textArray != null){
                         Bitmap image = createBitmapFromTextArray(textArray, true);
                         if(image != null){
-                            Bitmap resizedImage = resizeBitmapTo203DPI(image);
-                            builder.appendBitmap(resizedImage, false);
+                            builder.appendBitmap(image, false);
                         }
                     }
                 } else if (command.has("drawLine")){
@@ -1591,24 +1586,5 @@ public class StarPRNT extends CordovaPlugin {
         return bitmap;
     }
 
-    private Bitmap resizeBitmapTo203DPI(Bitmap originalBitmap) {
-        int targetDPI = 203; // Set the target DPI
 
-        // Get the original width and height of the bitmap
-        int originalWidth = originalBitmap.getWidth();
-        int originalHeight = originalBitmap.getHeight();
-
-        // Calculate the target width and height
-        int targetWidth = (int) (originalWidth * (targetDPI / (float) originalBitmap.getDensity()));
-        int targetHeight = (int) (originalHeight * (targetDPI / (float) originalBitmap.getDensity()));
-
-        // Resize the bitmap to the target width and height
-        Bitmap resizedBitmap = Bitmap.createScaledBitmap(originalBitmap, targetWidth, targetHeight, true);
-
-        // Set the density to the target DPI
-        resizedBitmap.setDensity(targetDPI);
-
-        return resizedBitmap;
-    }
-    
 }
