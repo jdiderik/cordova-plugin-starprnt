@@ -1029,14 +1029,16 @@ public class StarPRNT extends CordovaPlugin {
                 } else if (command.has("text")){
                     Bitmap image = createBitmapFromTextField(command);
                     if(image != null){
-                        builder.appendBitmap(image, false);
+                        Bitmap resizedImage = resizeBitmapTo203DPI(image);
+                        builder.appendBitmap(resizedImage, false);
                     }
                 } else if (command.has("textArray")){
                     JSONArray textArray = command.getJSONArray("textArray");
                     if(textArray != null){
                         Bitmap image = createBitmapFromTextArray(textArray, true);
                         if(image != null){
-                            builder.appendBitmap(image, false);
+                            Bitmap resizedImage = resizeBitmapTo203DPI(image);
+                            builder.appendBitmap(resizedImage, false);
                         }
                     }
                 } else if (command.has("drawLine")){
@@ -1586,5 +1588,24 @@ public class StarPRNT extends CordovaPlugin {
         return bitmap;
     }
 
+    private Bitmap resizeBitmapTo203DPI(Bitmap originalBitmap) {
+        int targetDPI = 203; // Set the target DPI
 
+        // Get the original width and height of the bitmap
+        int originalWidth = originalBitmap.getWidth();
+        int originalHeight = originalBitmap.getHeight();
+
+        // Calculate the target width and height
+        int targetWidth = (int) (originalWidth * (targetDPI / (float) originalBitmap.getDensity()));
+        int targetHeight = (int) (originalHeight * (targetDPI / (float) originalBitmap.getDensity()));
+
+        // Resize the bitmap to the target width and height
+        Bitmap resizedBitmap = Bitmap.createScaledBitmap(originalBitmap, targetWidth, targetHeight, true);
+
+        // Set the density to the target DPI
+        resizedBitmap.setDensity(targetDPI);
+
+        return resizedBitmap;
+    }
+    
 }
