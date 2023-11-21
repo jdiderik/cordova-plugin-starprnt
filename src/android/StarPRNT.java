@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.EncodeHintType;
@@ -56,7 +57,11 @@ import android.text.TextPaint;
 import android.util.Log;
 import android.util.Base64;
 
-
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 /**
  * This class echoes a string called from JavaScript.
@@ -67,6 +72,7 @@ public class StarPRNT extends CordovaPlugin {
     private CallbackContext _callbackContext = null;
     String strInterface;
     private StarIoExtManager starIoExtManager;
+    private HashMap<String, Bitmap> bitmapCache = new HashMap<>();
 
 
     /**
@@ -1012,24 +1018,9 @@ public class StarPRNT extends CordovaPlugin {
                         builder.appendQrCodeWithAlignment(command.getString("appendQrCode").getBytes(encoding), qrCodeModel, qrCodeLevel, cell, alignmentPosition);
                     }else builder.appendQrCode(command.getString("appendQrCode").getBytes(encoding), qrCodeModel, qrCodeLevel, cell);
                 } else if (command.has("appendBitmap")){
-                    ContentResolver contentResolver = context.getContentResolver();
-                    String uriString = command.optString("appendBitmap");
-                    boolean diffusion = (command.has("diffusion")) ? command.getBoolean("diffusion") : true;
-                    int width = (command.has("width")) ? command.getInt("width") : 576;
-                    boolean bothScale = (command.has("bothScale")) ? command.getBoolean("bothScale") : true;
-                    ICommandBuilder.BitmapConverterRotation rotation = (command.has("rotation")) ? getConverterRotation(command.getString("rotation")) : getConverterRotation("Normal");
-                    try {
-                        Uri imageUri =  Uri.parse(uriString);
-                        Bitmap bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri);
-                        if(command.has("absolutePosition")){
-                            int position =  command.getInt("absolutePosition");
-                            builder.appendBitmapWithAbsolutePosition(bitmap, diffusion, width, bothScale, rotation, position);
-                        }else if(command.has("alignment")){
-                            ICommandBuilder.AlignmentPosition alignmentPosition = getAlignment(command.getString("alignment"));
-                            builder.appendBitmapWithAlignment(bitmap, diffusion, width, bothScale, rotation, alignmentPosition);
-                        }else builder.appendBitmap(bitmap, diffusion, width, bothScale, rotation);
-                    } catch (IOException e) {
-
+                    String uriString = command.getString("appendBitmap");
+                    if (uriString != null) {
+                        getAndCacheImage(uriString, command, builder, context);
                     }
                 } else if (command.has("text")){
                     Bitmap image = createBitmapFromTextField(command);
@@ -1591,5 +1582,86 @@ public class StarPRNT extends CordovaPlugin {
         return bitmap;
     }
 
+    private void getAndCacheImage(String imageUrl, JSONObject command, ICommandBuilder builder, Context context) {
+        if (isBitmapCached(imageUrl)) {
+            // Image is already cached, use it
+            processBitmap(getCachedBitmap(imageUrl), command, builder);
+        } else {
+            if(imageUrl.startsWith("http://") || imageUrl.startsWith("https://")){
+                Request request = new Request.Builder()
+                    .url(imageUrl) // Replace imageUrl with the URL of the image
+                    .build();
+
+                OkHttpClient client = new OkHttpClient();
+
+                try {
+                    Response response = client.newCall(request).execute();
+                    
+                    if (response.isSuccessful()) {
+                        // Process the successful response here
+                        // Retrieve the bitmap from the response body
+                        Bitmap bitmap = BitmapFactory.decodeStream(response.body().byteStream());
+
+                        // Cache the bitmap
+                        cacheBitmap(imageUrl, bitmap);
+
+                        // Process the bitmap further if needed
+                        processBitmap(bitmap, command, builder);
+                    } else {
+                        // Handle other response codes if needed
+                        Log.e("StarPRNT", "Failed to fetch image: " + response.code());
+                    }
+                } catch (IOException e) {
+                    // Handle I/O exceptions
+                    Log.e("StarPRNT", "Error fetching image: " + e.getMessage());
+                }
+            } else {
+                ContentResolver contentResolver = context.getContentResolver();
+                try {
+                    Uri imageUri =  Uri.parse(imageUrl);
+                    Bitmap bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri);
+                    if(bitmap != null){
+                        cacheBitmap(imageUrl, bitmap);
+                        processBitmap(bitmap, command, builder);
+                    }
+                } catch (IOException e) {
+                    Log.e("StarPRNT", "Error parsing bitmap: " + e.getMessage()); // Log the error message
+                }
+            }
+        }
+    }
+
+    private boolean isBitmapCached(String imageUrl) {
+        return bitmapCache.containsKey(imageUrl);
+    }
+
+    private Bitmap getCachedBitmap(String imageUrl) {
+        return bitmapCache.get(imageUrl);
+    }
+
+    private void cacheBitmap(String imageUrl, Bitmap bitmap) {
+        bitmapCache.put(imageUrl, bitmap);
+    }
+
+        // Process the bitmap based on command parameters
+    private void processBitmap(Bitmap bitmap, JSONObject command, ICommandBuilder builder) {
+        try {
+            if (command.has("absolutePosition")) {
+                int position = command.getInt("absolutePosition");
+                builder.appendBitmapWithAbsolutePosition(bitmap, command.optBoolean("diffusion", true), command.optInt("width", 576), command.optBoolean("bothScale", true),
+                        getConverterRotation(command.optString("rotation", "Normal")), position);
+            } else if (command.has("alignment")) {
+                ICommandBuilder.AlignmentPosition alignmentPosition = getAlignment(command.getString("alignment"));
+                builder.appendBitmapWithAlignment(bitmap, command.optBoolean("diffusion", true), command.optInt("width", 576), command.optBoolean("bothScale", true),
+                        getConverterRotation(command.optString("rotation", "Normal")), alignmentPosition);
+            } else {
+                builder.appendBitmap(bitmap, command.optBoolean("diffusion", true), command.optInt("width", 576), command.optBoolean("bothScale", true),
+                        getConverterRotation(command.optString("rotation", "Normal")));
+            }
+        } catch (Exception e) {
+            Log.e("StarPRNT", "Error processing bitmap: " + e.getMessage()); // Log the error message
+            // Handle exceptions or errors in processing
+        }
+    }
 
 }
