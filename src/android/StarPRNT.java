@@ -13,6 +13,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.EncodeHintType;
+import com.google.zxing.MultiFormatWriter;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 
 import com.starmicronics.stario.PortInfo;
 import com.starmicronics.stario.StarIOPort;
