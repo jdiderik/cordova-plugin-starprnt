@@ -12,6 +12,7 @@
 		<clobbers target="starprnt" />
 	</js-module>
 	<platform name="android">
+		<framework src="com.google.zxing:core:3.4.1" />
 		<source-file src="src/android/StarPRNT.java" target-dir="src/starprnt/cordova" />
 		<!-- Using StarPRNT_Android_SDK_V5_5_0  -->
 		<source-file src="src/android/lib/StarIOPort3.1.jar" target-dir="libs" />
