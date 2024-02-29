@@ -1398,6 +1398,7 @@ public class StarPRNT extends CordovaPlugin {
         int paddingRight = 0;
         int paddingBottom = 0;
         int paddingLeft = 0;
+        boolean doubleHeight = false;
         try{
             if(config.has("width") ){
                 printWidth = config.getInt("width");
@@ -1426,6 +1427,9 @@ public class StarPRNT extends CordovaPlugin {
             if(config.has("paddingLeft") ){
                 paddingLeft = config.getInt("paddingLeft");
             }
+            if (config.has("doubleHeight")) {
+                doubleHeight = config.getBoolean("doubleHeight");
+            }
         } catch (JSONException e) {
             _callbackContext.error(e.getMessage());
             return null;
@@ -1433,13 +1437,23 @@ public class StarPRNT extends CordovaPlugin {
         if(typeface == null){
             typeface = Typeface.create(Typeface.DEFAULT, typefaceStyle);
         }
-        
+
+        if (doubleHeight) {
+            textSize *= 2;
+        }
+
         Paint paint = new Paint();
         Bitmap bitmap;
         Canvas canvas;
 
         paint.setTextSize(textSize);
         paint.setTypeface(typeface);
+        if (doubleHeight) {
+            printWidth *= 2;
+            paddingLeft *= 2;
+            paddingRight *= 2;
+        }
+
         int maxTextWidth = printWidth - (paddingLeft + paddingRight);
         paint.getTextBounds(printText, 0, printText.length(), new Rect());
 
@@ -1466,6 +1480,20 @@ public class StarPRNT extends CordovaPlugin {
         canvas.drawColor(inverted ? Color.BLACK : Color.WHITE);
         canvas.translate(x, y);
         staticLayout.draw(canvas);
+
+        if (doubleHeight) {
+            int newWidth = width / 2;
+
+            Bitmap resizedBitmap = Bitmap.createBitmap(newWidth, height, bitmap.getConfig());
+
+            Canvas c = new Canvas(resizedBitmap);
+
+            Rect srcRect = new Rect(0, 0, width, height);
+            Rect destRect = new Rect(0, 0, newWidth, height);
+            c.drawBitmap(bitmap, srcRect, destRect, null);
+
+            return resizedBitmap;
+        }
 
         return bitmap;
     }
