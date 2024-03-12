@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<plugin id="cordova-plugin-starprnt" version="2.2.17" xmlns="http://apache.org/cordova/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android">
+<plugin id="cordova-plugin-starprnt" version="2.2.18" xmlns="http://apache.org/cordova/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android">
 	<name>StarPRNT</name>
 	<description>Plugin to use Star printers and connected drawer</description>
 	<author>Jose Angarita / Ruben Casas</author>
@@ -19,13 +19,14 @@
 		<source-file src="src/android/lib/StarIOPort3.1.jar" target-dir="libs" />
 		<source-file src="src/android/lib/starioextension.jar" target-dir="libs" />
 		<config-file target="res/xml/config.xml" parent="/*">
-		<feature name="StarPRNT">
-			<param name="android-package" value="starprnt.cordova.StarPRNT" />
-		</feature>
-		</config-file>
-		<config-file target="AndroidManifest.xml" parent="/*" />
-		<config-file target="AndroidManifest.xml" parent="/manifest">
-		<uses-permission android:name="android.permission.BLUETOOTH" />
+			<feature name="StarPRNT">
+				<param name="android-package" value="starprnt.cordova.StarPRNT" />
+			</feature>
+			</config-file>
+			<config-file target="AndroidManifest.xml" parent="/*" />
+			<config-file target="AndroidManifest.xml" parent="/manifest">
+			<uses-permission android:name="android.permission.BLUETOOTH" />
+			<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 		</config-file>
   	</platform>
 	<platform name="ios">
